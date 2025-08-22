@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Inventory Manager</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Inventory Management System</h1>
+
+  <div class="form-container">
+    <input type="text" id="name" placeholder="Product Name" />
+    <input type="number" id="quantity" placeholder="Quantity" />
+    <input type="number" id="price" placeholder="Price" />
+    <button onclick="addOrUpdate()">Add / Update</button>
+  </div>
+
+  <div id="alert"></div>
+
+  <h2>Product List</h2>
+  <table id="product-table">
+    <thead>
+      <tr><th>Name</th><th>Quantity</th><th>Price</th><th>Action</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Stock Distribution</h2>
+  <canvas id="stockChart" width="400" height="300"></canvas>
+
+  <script>
+    let stockChartInstance = null;
+
+    async function loadInventory() {
+      const data = await window.pywebview.api.get_inventory();
+      const table = document.querySelector("#product-table tbody");
+      const alertBox = document.getElementById("alert");
+
+      table.innerHTML = "";
+      alertBox.innerHTML = "";
+
+      const labels = [];
+      const quantities = [];
+      const backgroundColors = [];
+
+      const palette = [
+        '#4caf50', '#f44336', '#2196f3', '#ff9800', '#9c27b0',
+        '#00bcd4', '#795548', '#e91e63', '#3f51b5', '#cddc39',
+        '#009688', '#673ab7'
+      ];
+
+      data.forEach((item, index) => {
+        table.innerHTML += `
+          <tr>
+            <td>${item.name}</td>
+            <td>${item.quantity}</td>
+            <td>₹${item.price}</td>
+            <td><button onclick="deleteProduct('${item.name}')">Delete</button></td>
+          </tr>`;
+
+        labels.push(item.name);
+        quantities.push(item.quantity);
+        backgroundColors.push(palette[index % palette.length]);
+
+        if (item.quantity <= 5) {
+          alertBox.innerHTML += `<p class='low'>⚠️ Low stock: ${item.name} (${item.quantity})</p>`;
+        }
+      });
+
+      drawPieChart(labels, quantities, backgroundColors);
+    }
+
+    function drawPieChart(labels, data, colors) {
+      const ctx = document.getElementById("stockChart").getContext("2d");
+      if (stockChartInstance) stockChartInstance.destroy();
+
+      stockChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: colors
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' }
+          }
+        }
+      });
+    }
+
+    async function addOrUpdate() {
+      const name = document.getElementById("name").value;
+      const quantity = document.getElementById("quantity").value;
+      const price = document.getElementById("price").value;
+
+      if (!name || !quantity || !price) return alert("Please fill all fields!");
+
+      await window.pywebview.api.add_or_update_product({ name, quantity, price });
+      document.getElementById("name").value = "";
+      document.getElementById("quantity").value = "";
+      document.getElementById("price").value = "";
+      loadInventory();
+    }
+
+    async function deleteProduct(name) {
+      if (confirm(`Delete ${name}?`)) {
+        await window.pywebview.api.delete_product(name);
+        loadInventory();
+      }
+    }
+
+    loadInventory();
+  </script>
+</body>
+</html>
